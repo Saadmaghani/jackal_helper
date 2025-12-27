@@ -1,2 +1,5 @@
 # bridge settings not working for services
 bridge.yaml 
+
+# pycache files
+*.pyc 

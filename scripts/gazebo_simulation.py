@@ -37,6 +37,9 @@ class GazeboSimulation(Node):
     def __init__(self, init_position = [0.0, 0.0, 0.0]):
         super().__init__('Gazebo_Simulation')
 
+        # declare ROS parameters
+        self._declare_parameters()
+
         # initialize service clients
         self._initialize_service_clients()
 
@@ -44,6 +47,9 @@ class GazeboSimulation(Node):
 
         # initialize model state: (Entity, Pose) 
         self._init_model_state = create_model_state(init_position[0], init_position[1], 0.1, init_position[2])
+
+    def _declare_parameters(self):
+        pass
 
     def _initialize_subscribers(self):
         # initialize collision counter and relevant code
@@ -68,8 +74,6 @@ class GazeboSimulation(Node):
             '/world/default/control'
         )
 
-
-     
     def _collision_cb(self, msg):
         self.get_logger().debug(f"/robot/collision callback received!")
         self.get_logger().debug(f"msg.data: {msg.data}.")
@@ -87,9 +91,7 @@ class GazeboSimulation(Node):
                 self.latest_pose.position.x = tf_stamped.transform.translation.x
                 self.latest_pose.position.y = tf_stamped.transform.translation.y
                 self.latest_pose.position.z = tf_stamped.transform.translation.z
-                self.latest_pose.orientation.x = tf_stamped.transform.rotation
-
-
+                self.latest_pose.orientation = tf_stamped.transform.rotation
 
     def get_hard_collision(self):
         # hard collision count since last call
@@ -109,7 +111,7 @@ class GazeboSimulation(Node):
             self.get_logger().debug('Waiting for ControlWorld service...')
         future = self.control_world_client.call_async(req)
         rclpy.spin_until_future_complete(self, future)
-        return future.result()
+        return future
     
     def unpause(self):
         req = ControlWorld.Request()
@@ -118,7 +120,7 @@ class GazeboSimulation(Node):
             self.get_logger().debug('Waiting for ControlWorld service...')
         future = self.control_world_client.call_async(req)
         rclpy.spin_until_future_complete(self, future)
-        return future.result()
+        return future
 
     def reset_model(self):
         """
@@ -131,11 +133,10 @@ class GazeboSimulation(Node):
             self.get_logger().debug('Waiting for set_pose service...')
         future = self.set_entity_state_client.call_async(req)
         rclpy.spin_until_future_complete(self, future)
-        return future.result()
+        return future
 
     def get_model_state(self):
         return self.latest_pose
-        
     
     def reset_init_model_state(self, init_position = [0.0, 0.0, 0.0]):
         """
@@ -152,55 +153,55 @@ def test():
 
     node = GazeboSimulation()
     node.get_logger().info("object created.")
-    time.sleep(1)
+    rclpy.spin_once(node, timeout_sec=1.0)
 
     init_model_state = [10.0, -4.0, 0]
     node.get_logger().info(f"[1/8]: Reseting init model state to {init_model_state}...")
     node.reset_init_model_state(init_model_state)
     node.get_logger().info("[1/8]: Init model state reset.")
-    time.sleep(1)
+    rclpy.spin_once(node, timeout_sec=1.0)
 
 
     node.get_logger().info(f"[2/8]: Resetting model to {init_model_state}...")
     pose = node.reset_model()
     node.get_logger().info(f"[2/8]: Model reset.")
-    time.sleep(1)
+    rclpy.spin_once(node, timeout_sec=1.0)
 
 
     node.get_logger().info(f"[3/8]: Requesting pose...")
     pose = node.get_model_state().position
     node.get_logger().info(f"[3/8]: Model at({pose.x}, {pose.y}, {pose.z}).")
-    time.sleep(1)
+    rclpy.spin_once(node, timeout_sec=1.0)
 
     
     init_model_state = [-2.0, 3.0, 1.57]
     node.get_logger().info(f"[4/8]: Reseting init model state to {init_model_state}...")
     node.reset_init_model_state(init_model_state)
     node.get_logger().info("[4/8]: Init model state reset.")
-    time.sleep(1)
+    rclpy.spin_once(node, timeout_sec=1.0)
 
 
     node.get_logger().info(f"[5/8]: Resetting model to {init_model_state}...")
     pose = node.reset_model()
     node.get_logger().info(f"[5/8]: Model reset.")
-    time.sleep(1)
+    rclpy.spin_once(node, timeout_sec=1.0)
 
 
     node.get_logger().info(f"[6/8]: Requesting pose...")
     pose = node.get_model_state().position
     node.get_logger().info(f"[6/8]: Model at({pose.x}, {pose.y}, {pose.z}).")
-    time.sleep(1)
+    rclpy.spin_once(node, timeout_sec=1.0)
 
 
     node.get_logger().info("[7/8]: pausing physics...")
     node.pause()
     node.get_logger().info("[7/8]: paused.")
-    time.sleep(1)
+    rclpy.spin_once(node, timeout_sec=1.0)
 
     node.get_logger().info("[8/8]: unpausing physics...")
     node.unpause()
     node.get_logger().info("[8/8]: unpaused.")
-    time.sleep(1)
+    rclpy.spin_once(node, timeout_sec=1.0)
 
     node.get_logger().info("test complete. unpaused physics, node running for collision checking")
 
@@ -210,6 +211,12 @@ def test():
     node.destroy_node()
     rclpy.shutdown()
 
+def main():
+    rclpy.init()
+    node = GazeboSimulation()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
 
 if __name__ == '__main__':
-    test()
+    main()

@@ -39,6 +39,7 @@ find_package(ros_gz_interfaces REQUIRED)
 ## Python Executables
 install(PROGRAMS
   scripts/gazebo_simulation.py
+  scripts/barn_runner.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

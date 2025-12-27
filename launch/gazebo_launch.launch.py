@@ -16,12 +16,28 @@ ARGUMENTS = [
                           choices=['true', 'false'], description='Start rviz.'),
     DeclareLaunchArgument('gui', default_value='true',
                           choices=['true', 'false'], description='Start gazebo gui.'),
-    DeclareLaunchArgument('world', default_value='world_0_og',
+    DeclareLaunchArgument('world_idx', default_value='1',
                           description='Gazebo World'),
     DeclareLaunchArgument('setup_path',
                           default_value=[get_package_share_directory('jackal_helper'), '/config'],
                           description='Clearpath setup path'),
 ]
+
+def parse_world_idx(world_idx:str)->str:
+    base_path = get_package_share_directory("jackal_helper")
+    world_idx = int(world_idx)
+    if world_idx < 300:  # static environment from 0-299
+        world_name = f"BARN/world_{world_idx}.world" 
+        INIT_POSITION = [-2.25, 3, 1.57]  # in world frame
+        GOAL_POSITION = [0, 10]  # relative to the initial position
+    elif world_idx < 360:  # Dynamic environment from 300-359
+        world_name = f"DynaBARN/world_{world_idx - 300}.world"
+        INIT_POSITION = [11, 0, 3.14]  # in world frame
+        GOAL_POSITION = [-20, 0]  # relative to the initial position
+    else:
+        raise ValueError(f"World index {world_idx} does not exist")
+
+    return os.path.join(base_path, "worlds", world_name)
 
 def launch_ros_gazebo(context, *args, **kwargs):
     """
@@ -35,23 +51,24 @@ def launch_ros_gazebo(context, *args, **kwargs):
     gz_sim_launch = PathJoinSubstitution([pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py'])
     gui_config = PathJoinSubstitution([pkg_jackal_helper, 'config', 'gui.config'])
 
-    # Determine all ros packages that are sourced
-    packages_paths = [os.path.join(p, 'share') for p in os.getenv('AMENT_PREFIX_PATH').split(':')]
+    # # Determine all ros packages that are sourced
+    # packages_paths = [os.path.join(p, 'share') for p in os.getenv('AMENT_PREFIX_PATH').split(':')]
 
-    # Set ignition resource path to include all sourced ros packages
-    gz_sim_resource_path = SetEnvironmentVariable(
-        name='GZ_SIM_RESOURCE_PATH',
-        value=[
-            os.path.join(pkg_jackal_helper, 'worlds') + ':',
-            ':' + ':'.join(packages_paths)])
+    # # Set ignition resource path to include all sourced ros packages
+    # gz_sim_resource_path = SetEnvironmentVariable(
+    #     name='GZ_SIM_RESOURCE_PATH',
+    #     value=[
+    #         os.path.join(pkg_jackal_helper, 'worlds', 'BARN') + ':',
+    #         ':' + ':'.join(packages_paths)])
 
     gui_cmd = "" if LaunchConfiguration('gui').perform(context)=='true' else " -s"
+    world_path = parse_world_idx(LaunchConfiguration("world_idx").perform(context))
     
     # Gazebo Simulator
     gz_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([gz_sim_launch]),
         launch_arguments=[
-            ('gz_args', [LaunchConfiguration('world'),
+            ('gz_args', [world_path,
                         gui_cmd,
                          ' -r',
                          ' --gui-config ',
@@ -76,7 +93,7 @@ def launch_ros_gazebo(context, *args, **kwargs):
         ]
     )
 
-    return [gz_sim_resource_path, gz_sim, clock_bridge]
+    return [gz_sim, clock_bridge]
 
 def spawn_jackal(context, *args, **kwargs):
     # SPAWN ROBOT
@@ -84,12 +101,14 @@ def spawn_jackal(context, *args, **kwargs):
     
     spawner_launch_path = PathJoinSubstitution([pkg_clearpath_gz, 'launch', 'robot_spawn.launch.py'])
     
+    world_name = f"world_{LaunchConfiguration('world_idx').perform(context)}.world"
+
     robot_spawn = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([spawner_launch_path]),
         launch_arguments=[
             ('use_sim_time', 'true'),
             ('setup_path', LaunchConfiguration('setup_path')),
-            ('world', LaunchConfiguration('world')),
+            ('world', world_name),
             ('rviz', LaunchConfiguration('rviz')),
             ('x', '2.0'),
             ('y', '2.0'),
