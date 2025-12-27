@@ -5,17 +5,21 @@ from rclpy.node import Node
 
 from ros_gz_interfaces.srv import SetEntityPose, ControlWorld
 from ros_gz_interfaces.msg import Entity
-from geometry_msgs.msg import Pose, Quaternion
+from geometry_msgs.msg import Pose, Quaternion, TransformStamped
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool
+from tf2_msgs.msg import TFMessage
 
 import numpy as np
 import time
 
+JACKAL_ENTITY_NAME = "robot"
+DEBUG = False
+
 def create_model_state(x:float, y:float, z:float, angle:float) -> [Entity, Pose]:
     # create Entity & Pose objects
     model_entity = Entity()
-    model_entity.name = "robot"
+    model_entity.name = JACKAL_ENTITY_NAME
 
     model_pose = Pose()
     model_pose.position.x = float(x)
@@ -31,14 +35,17 @@ def create_model_state(x:float, y:float, z:float, angle:float) -> [Entity, Pose]
 
 class GazeboSimulation(Node):
     def __init__(self, init_position = [0.0, 0.0, 0.0]):
-        super().__init__('GazeboSimulation')
+        super().__init__('Gazebo_Simulation')
 
         # initialize service clients
         self._initialize_service_clients()
 
+        self._initialize_subscribers()
+
         # initialize model state: (Entity, Pose) 
         self._init_model_state = create_model_state(init_position[0], init_position[1], 0.1, init_position[2])
 
+    def _initialize_subscribers(self):
         # initialize collision counter and relevant code
         self.collision_count = 0
         self.create_subscription(Bool, '/robot/touched', self._collision_cb, 10)
@@ -46,6 +53,9 @@ class GazeboSimulation(Node):
         # initialize subscriber for laser_scan
         self.create_subscription(LaserScan, '/front/scan', self._scan_cb, 10)
         self.latest_scan = None
+
+        self.create_subscription(TFMessage, '/model/robot/pose', self._tf_msg_cb, 10)
+        self.latest_pose = Pose()
 
     def _initialize_service_clients(self):
         self.set_entity_state_client = self.create_client(
@@ -57,16 +67,29 @@ class GazeboSimulation(Node):
             ControlWorld,
             '/world/default/control'
         )
+
+
      
     def _collision_cb(self, msg):
-        self.get_logger().info(f"/robot/touched callback received!")
-        self.get_logger().info(f"msg.data: {msg.data}.")
-        self.get_logger().info(f"collision_count: {self.collision_count}.")
+        self.get_logger().debug(f"/robot/collision callback received!")
+        self.get_logger().debug(f"msg.data: {msg.data}.")
+        self.get_logger().debug(f"collision_count: {self.collision_count}.")
         if msg.data:
             self.collision_count += 1 
 
     def _scan_cb(self, msg):
         self.latest_scan = msg
+
+    def _tf_msg_cb(self, msg):
+        for tf_stamped in msg.transforms:
+            if tf_stamped.child_frame_id == JACKAL_ENTITY_NAME:
+                # copying values without copying Vector3 object to keep the client side code same
+                self.latest_pose.position.x = tf_stamped.transform.translation.x
+                self.latest_pose.position.y = tf_stamped.transform.translation.y
+                self.latest_pose.position.z = tf_stamped.transform.translation.z
+                self.latest_pose.orientation.x = tf_stamped.transform.rotation
+
+
 
     def get_hard_collision(self):
         # hard collision count since last call
@@ -83,7 +106,7 @@ class GazeboSimulation(Node):
         req = ControlWorld.Request()
         req.world_control.pause = True
         while not self.control_world_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('Waiting for ControlWorld service...')
+            self.get_logger().debug('Waiting for ControlWorld service...')
         future = self.control_world_client.call_async(req)
         rclpy.spin_until_future_complete(self, future)
         return future.result()
@@ -92,7 +115,7 @@ class GazeboSimulation(Node):
         req = ControlWorld.Request()
         req.world_control.pause = False
         while not self.control_world_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('Waiting for ControlWorld service...')
+            self.get_logger().debug('Waiting for ControlWorld service...')
         future = self.control_world_client.call_async(req)
         rclpy.spin_until_future_complete(self, future)
         return future.result()
@@ -105,17 +128,14 @@ class GazeboSimulation(Node):
         req.entity = self._init_model_state[0]
         req.pose = self._init_model_state[1]
         while not self.set_entity_state_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().info('Waiting for set_pose service...')
+            self.get_logger().debug('Waiting for set_pose service...')
         future = self.set_entity_state_client.call_async(req)
         rclpy.spin_until_future_complete(self, future)
         return future.result()
 
-    # def get_model_state(self):
-    #     req = self.get_entity_state_client.Request()
-    #     req.entity = "jackal"
-    #     future = self.get_entity_state_client.call_async(req)
-    #     rclpy.spin_until_future_complete(self, future)
-    #     return future.result()
+    def get_model_state(self):
+        return self.latest_pose
+        
     
     def reset_init_model_state(self, init_position = [0.0, 0.0, 0.0]):
         """
@@ -125,50 +145,71 @@ class GazeboSimulation(Node):
         """
         self._init_model_state = create_model_state(init_position[0],init_position[1],0.1,init_position[2])
 
-
-def main():
+# TODO: 1. fix ros-gz bridge so that topics are standardized
+# TODO: 2. wait for results of services before proceeding to next test.
+def test():
     rclpy.init()
 
     node = GazeboSimulation()
     node.get_logger().info("object created.")
     time.sleep(1)
+
+    init_model_state = [10.0, -4.0, 0]
+    node.get_logger().info(f"[1/8]: Reseting init model state to {init_model_state}...")
+    node.reset_init_model_state(init_model_state)
+    node.get_logger().info("[1/8]: Init model state reset.")
+    time.sleep(1)
+
+
+    node.get_logger().info(f"[2/8]: Resetting model to {init_model_state}...")
+    pose = node.reset_model()
+    node.get_logger().info(f"[2/8]: Model reset.")
+    time.sleep(1)
+
+
+    node.get_logger().info(f"[3/8]: Requesting pose...")
+    pose = node.get_model_state().position
+    node.get_logger().info(f"[3/8]: Model at({pose.x}, {pose.y}, {pose.z}).")
+    time.sleep(1)
+
     
     init_model_state = [-2.0, 3.0, 1.57]
-    node.get_logger().info(f"[1/5]: reseting init model state to {init_model_state}...")
+    node.get_logger().info(f"[4/8]: Reseting init model state to {init_model_state}...")
     node.reset_init_model_state(init_model_state)
-    node.get_logger().info("[1/5]: init model state reset.")
+    node.get_logger().info("[4/8]: Init model state reset.")
     time.sleep(1)
 
-    node.get_logger().info(f"[2/5]: resetting model to {init_model_state}...")
-    node.reset_model()
-    node.get_logger().info("[2/5]: model reset.")
+
+    node.get_logger().info(f"[5/8]: Resetting model to {init_model_state}...")
+    pose = node.reset_model()
+    node.get_logger().info(f"[5/8]: Model reset.")
     time.sleep(1)
 
-    node.get_logger().info("[3/5]: unpausing physics...")
-    node.unpause()
-    node.get_logger().info("[3/5]: unpaused.")
+
+    node.get_logger().info(f"[6/8]: Requesting pose...")
+    pose = node.get_model_state().position
+    node.get_logger().info(f"[6/8]: Model at({pose.x}, {pose.y}, {pose.z}).")
     time.sleep(1)
 
-    node.get_logger().info("[4/5]: pausing physics...")
+
+    node.get_logger().info("[7/8]: pausing physics...")
     node.pause()
-    node.get_logger().info("[4/5]: paused.")
+    node.get_logger().info("[7/8]: paused.")
     time.sleep(1)
 
+    node.get_logger().info("[8/8]: unpausing physics...")
     node.unpause()
+    node.get_logger().info("[8/8]: unpaused.")
+    time.sleep(1)
+
     node.get_logger().info("test complete. unpaused physics, node running for collision checking")
 
     rclpy.spin(node) 
-    
-    # node.get_logger().info("[5/5]: unpausing & waiting until hard collision happens...")
-    # node.unpause()
-    # while not node.get_hard_collision():
-    #     pass
-    # node.get_logger().info("[5/5]: hard collision!")
-    # time.sleep(1)
+
 
     node.destroy_node()
     rclpy.shutdown()
 
 
 if __name__ == '__main__':
-    main()
+    test()

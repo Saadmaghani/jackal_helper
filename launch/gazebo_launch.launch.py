@@ -53,26 +53,27 @@ def launch_ros_gazebo(context, *args, **kwargs):
         launch_arguments=[
             ('gz_args', [LaunchConfiguration('world'),
                         gui_cmd,
-                         ' -r -v 4',
+                         ' -r',
                          ' --gui-config ',
                          gui_config])
         ]
     )
 
+    bridge_config_file = PathJoinSubstitution([pkg_jackal_helper, 'config', 'bridge.yaml'])
     # Clock bridge
     clock_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
         name='clock_bridge',
         output='screen',
+        # parameters=[{"config_file":bridge_config_file}]
         arguments=[
             '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
             '/world/default/control@ros_gz_interfaces/srv/ControlWorld',
             '/world/default/set_pose@ros_gz_interfaces/srv/SetEntityPose',
-            '/robot/touched@std_msgs/msg/Bool@gz.msgs.Boolean'
-            # 'ground_truth/state@nav_msgs/msg/Odometry@gz.msgs.Odometry'
+            '/robot/touched@std_msgs/msg/Bool@gz.msgs.Boolean',
+            '/model/robot/pose@tf2_msgs/msg/TFMessage@gz.msgs.Pose_V'
         ]
-
     )
 
     return [gz_sim_resource_path, gz_sim, clock_bridge]

@@ -32,6 +32,7 @@
   <!-- Messages -->
   <depend>std_msgs</depend>
   <depend>nav_msgs</depend>
+  <depend>tf2_msgs</depend>
 
   <!-- Gazebo Sim bridge interfaces -->
   <depend>ros_gz_interfaces</depend>
