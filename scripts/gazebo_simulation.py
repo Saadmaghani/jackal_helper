@@ -5,7 +5,7 @@ from rclpy.node import Node
 
 from ros_gz_interfaces.srv import SetEntityPose, ControlWorld
 from ros_gz_interfaces.msg import Entity
-from geometry_msgs.msg import Pose, Quaternion, TransformStamped
+from geometry_msgs.msg import Pose, Quaternion
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool
 from tf2_msgs.msg import TFMessage
@@ -13,8 +13,11 @@ from tf2_msgs.msg import TFMessage
 import numpy as np
 import time
 
+# comes from robot.yaml file. JACKAL_ENTITY_NAME = "robot" if namespace == "" or "/" else "<namespace>/robot"
 JACKAL_ENTITY_NAME = "robot"
 DEBUG = False
+
+# TODO: figure out laser scan topic
 
 def create_model_state(x:float, y:float, z:float, angle:float) -> [Entity, Pose]:
     # create Entity & Pose objects
@@ -33,23 +36,16 @@ def create_model_state(x:float, y:float, z:float, angle:float) -> [Entity, Pose]
 
     return (model_entity, model_pose)
 
-class GazeboSimulation(Node):
+class GazeboSimulationController(Node):
     def __init__(self, init_position = [0.0, 0.0, 0.0]):
-        super().__init__('Gazebo_Simulation')
+        super().__init__('Gazebo_Simulation_Controller')
 
-        # declare ROS parameters
-        self._declare_parameters()
-
-        # initialize service clients
         self._initialize_service_clients()
 
         self._initialize_subscribers()
 
         # initialize model state: (Entity, Pose) 
         self._init_model_state = create_model_state(init_position[0], init_position[1], 0.1, init_position[2])
-
-    def _declare_parameters(self):
-        pass
 
     def _initialize_subscribers(self):
         # initialize collision counter and relevant code
@@ -75,9 +71,10 @@ class GazeboSimulation(Node):
         )
 
     def _collision_cb(self, msg):
-        self.get_logger().debug(f"/robot/collision callback received!")
-        self.get_logger().debug(f"msg.data: {msg.data}.")
-        self.get_logger().debug(f"collision_count: {self.collision_count}.")
+        if DEBUG:
+            self.get_logger().info(f"/robot/collision callback received!")
+            self.get_logger().info(f"msg.data: {msg.data}.")
+            self.get_logger().info(f"collision_count: {self.collision_count}.")
         if msg.data:
             self.collision_count += 1 
 
@@ -108,7 +105,8 @@ class GazeboSimulation(Node):
         req = ControlWorld.Request()
         req.world_control.pause = True
         while not self.control_world_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().debug('Waiting for ControlWorld service...')
+            if DEBUG:
+                self.get_logger().info('Waiting for ControlWorld service...')
         future = self.control_world_client.call_async(req)
         rclpy.spin_until_future_complete(self, future)
         return future
@@ -117,7 +115,8 @@ class GazeboSimulation(Node):
         req = ControlWorld.Request()
         req.world_control.pause = False
         while not self.control_world_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().debug('Waiting for ControlWorld service...')
+            if DEBUG:
+                self.get_logger().debug('Waiting for ControlWorld service...')
         future = self.control_world_client.call_async(req)
         rclpy.spin_until_future_complete(self, future)
         return future
@@ -130,7 +129,8 @@ class GazeboSimulation(Node):
         req.entity = self._init_model_state[0]
         req.pose = self._init_model_state[1]
         while not self.set_entity_state_client.wait_for_service(timeout_sec=1.0):
-            self.get_logger().debug('Waiting for set_pose service...')
+            if DEBUG:
+                self.get_logger().info('Waiting for set_pose service...')
         future = self.set_entity_state_client.call_async(req)
         rclpy.spin_until_future_complete(self, future)
         return future
