@@ -26,13 +26,14 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Taken from https://github.com/clearpathrobotics/clearpath_nav2_demos/blob/humble/launch/nav2.launch.py
-# Adapted to include dynamic nav2 configuration files during runtime
+# Taken from https://github.com/clearpathrobotics/clearpath_nav2_demos/blob/jazzy/launch/nav2.launch.py
+
+import os
 
 from ament_index_python.packages import get_package_share_directory
 
-from clearpath_config.common.utils.yaml import read_yaml
 from clearpath_config.clearpath_config import ClearpathConfig
+from clearpath_config.common.utils.yaml import read_yaml
 
 from launch import LaunchDescription
 from launch.actions import (
@@ -50,17 +51,19 @@ from launch.substitutions import (
 
 from launch_ros.actions import PushRosNamespace, SetRemap
 
+from nav2_common.launch import RewrittenYaml
+
 
 ARGUMENTS = [
     DeclareLaunchArgument('use_sim_time', default_value='false',
                           choices=['true', 'false'],
                           description='Use sim time'),
     DeclareLaunchArgument('setup_path',
-                          default_value='/etc/clearpath/',
+                          default_value=PathJoinSubstitution([get_package_share_directory('jackal_helper'), 'config']),
                           description='Clearpath setup path'),
-    DeclareLaunchArgument('nav2_config_path',
-                          default_value=[get_package_share_directory('jackal_helper'), '/config', '/nav2.yaml'],
-                          description='nav2 configuration file path'),
+    DeclareLaunchArgument('scan_topic',
+                          default_value='',
+                          description='Override the default 2D laserscan topic')
 ]
 
 
@@ -71,35 +74,46 @@ def launch_setup(context, *args, **kwargs):
     # Launch Configurations
     use_sim_time = LaunchConfiguration('use_sim_time')
     setup_path = LaunchConfiguration('setup_path')
-    nav2_config_path = LaunchConfiguration('nav2_config_path')
+    scan_topic = LaunchConfiguration('scan_topic')
 
     # Read robot YAML
-    config = read_yaml(setup_path.perform(context) + 'robot.yaml')
+    config = read_yaml(os.path.join(setup_path.perform(context), 'robot.yaml'))
     # Parse robot YAML into config
     clearpath_config = ClearpathConfig(config)
 
     namespace = clearpath_config.system.namespace
     platform_model = clearpath_config.platform.get_platform_model()
 
-    # get nav2 configuration file
-    file_parameters = nav2_config_path.perform(context)
-    
+    # see if we've overridden the scan_topic
+    eval_scan_topic = scan_topic.perform(context)
+    if len(eval_scan_topic) == 0:
+        eval_scan_topic = f'/{namespace}/sensors/lidar2d_0/scan'
+
+    file_parameters = PathJoinSubstitution([setup_path, 'nav2.yaml'])
+
+    rewritten_parameters = RewrittenYaml(
+        source_file=file_parameters,
+        param_rewrites={
+            # the only *.topic parameters are scan.topic, so rewrite all of them to point to
+            # our desired scan_topic
+            'topic': eval_scan_topic,
+        },
+        convert_types=True
+    )
 
     launch_nav2 = PathJoinSubstitution(
       [pkg_nav2_bringup, 'launch', 'navigation_launch.py'])
 
     nav2 = GroupAction([
         PushRosNamespace(namespace),
-        SetRemap('/' + namespace + '/global_costmap/sensors/lidar2d_0/scan',
-                 '/' + namespace + '/sensors/lidar2d_0/scan'),
-        SetRemap('/' + namespace + '/local_costmap/sensors/lidar2d_0/scan',
-                 '/' + namespace + '/sensors/lidar2d_0/scan'),
+        SetRemap('/' + namespace + '/odom',
+                 '/' + namespace + '/platform/odom'),
 
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(launch_nav2),
             launch_arguments=[
                 ('use_sim_time', use_sim_time),
-                ('params_file', file_parameters),
+                ('params_file', rewritten_parameters),
                 ('use_composition', 'False'),
                 ('namespace', namespace)
               ]

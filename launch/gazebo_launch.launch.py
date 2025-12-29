@@ -3,13 +3,12 @@ import os
 from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.actions import OpaqueFunction, SetEnvironmentVariable, LogInfo, Shutdown
-from launch.actions.timer_action import TimerAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, SetEnvironmentVariable
+from launch.actions import LogInfo, Shutdown, TimerAction, ExecuteProcess, GroupAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetRemap
 
 """Launch gz server, ros-gz-bridge, collision publisher, jackal, and gz gui optionally."""
 
@@ -69,18 +68,15 @@ def launch_ros_gazebo(context, *args, **kwargs):
                         gui_cmd,
                          ' -r',
                          ' --gui-config ',
-                         gui_config])
+                         gui_config]),
         ]
     )
 
-    # bridge_config_file = PathJoinSubstitution([pkg_jackal_helper, 'config', 'bridge.yaml'])
     # Clock bridge
     clock_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
         name='clock_bridge',
-        output='screen',
-        # parameters=[{"config_file":bridge_config_file}]
         arguments=[
             '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
             '/world/default/control@ros_gz_interfaces/srv/ControlWorld',
@@ -94,11 +90,10 @@ def launch_ros_gazebo(context, *args, **kwargs):
 
 def spawn_jackal(context, *args, **kwargs):
     # SPAWN ROBOT
-    pkg_clearpath_gz = get_package_share_directory('clearpath_gz')
-
-    spawner_launch_path = PathJoinSubstitution([pkg_clearpath_gz, 'launch', 'robot_spawn.launch.py'])
+    spawner_launch_path = PathJoinSubstitution([get_package_share_directory('clearpath_gz'), 'launch', 'robot_spawn.launch.py'])
     
     world_name = parse_world_idx(LaunchConfiguration('world_idx').perform(context))
+    remap_scan_topic = SetRemap(src='/sensors/lidar2d_0/scan', dst='/front/scan')
 
     robot_spawn = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([spawner_launch_path]),
@@ -112,10 +107,35 @@ def spawn_jackal(context, *args, **kwargs):
             ('z', '0.3')]
     )
 
-    return [robot_spawn]
+    return [remap_scan_topic, robot_spawn]
+
+def launch_navigation_stack(context, *args, **kwargs):
+    nav2_launch_path = PathJoinSubstitution([get_package_share_directory('jackal_helper'), 'launch', 'nav2_demo.launch.py'])
+    
+    nav2_launch = TimerAction(
+        period = 12.0,
+        actions=[
+            LogInfo(msg="Launching Nav2..."),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource([nav2_launch_path]),
+                launch_arguments=[
+                    ('use_sim_time', 'true'),
+                    ('setup_path', LaunchConfiguration('setup_path')),
+                    ('scan_topic', '/front/scan') 
+                    ]
+            )
+        ]
+    )
+
+    publish_initial_pose = None
+
+    publish_nav2_goal = None
+
+    return [nav2_launch]
 
 def generate_launch_description():
-    # Start the BARN_runner node after 5 seconds. this replaces the run.py in ROS1 version of The_BARN_Challenge.
+    
+    # Start the BARN_runner node after 10 seconds. this replaces the run.py in ROS1 version of The_BARN_Challenge.
     BARN_runner_node = TimerAction(
         period = 10.0,
         actions=[
@@ -123,22 +143,27 @@ def generate_launch_description():
             Node(
                 package="jackal_helper",
                 executable="barn_runner.py",
-                name="barn_runner",
                 output='screen',
-                on_exit=[LogInfo(msg="Trial ended. Shutting down in 5 seconds..."),TimerAction(period=5.0, actions=[Shutdown()])],
+                emulate_tty=True,
                 parameters=[
                     {'world_idx': LaunchConfiguration('world_idx')},
                     {'out_file': LaunchConfiguration('out_file')},
                     {'timeout': LaunchConfiguration('timeout')}
-                    ]
+                    ],
+                on_exit=[
+                    LogInfo(msg="Trial ended. Shutting down in 5 seconds..."),
+                    TimerAction(period=5.0, actions=[Shutdown(), ExecuteProcess(cmd=['pkill','-f','\'gz sim\''], shell=True)]),
+                    ],
+                
             )
         ]
     ) 
-
+    
     # Create launch description and add actions
     ld = LaunchDescription(ARGUMENTS)
     ld.add_action(OpaqueFunction(function=launch_ros_gazebo))
     ld.add_action(OpaqueFunction(function=spawn_jackal))
     ld.add_action(BARN_runner_node)
+    ld.add_action(OpaqueFunction(function=launch_navigation_stack))
     return ld
 

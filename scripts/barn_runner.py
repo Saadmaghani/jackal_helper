@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 
-# this file will be used to run the experiments and control the simulation via gazebo_simulation
+import time
+import os
+from os.path import dirname
+import threading
+import numpy as np
 
 import rclpy
 from rclpy.node import Node
@@ -9,12 +13,8 @@ from rclpy.parameter import Parameter
 from ament_index_python.packages import get_package_share_directory
 
 from gazebo_simulation import GazeboSimulationController
-import time
-import os
-from os.path import dirname
-import threading
-import numpy as np
 
+# this file will be used to run the experiments and control the simulation via gazebo_simulation
 
 def compute_distance(p1, p2):
     return ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5
@@ -59,8 +59,8 @@ class BARNRunner(Node):
             curr_coor = (pos.x, pos.y)
             collided = self.gazebo_sim_ctrl.get_hard_collision()
         
-        self.get_logger().info(f"initial position: ({curr_coor[0]}, {curr_coor[1]})")
-        self.get_logger().info(f"goal position: ({self.goal_coor[0]}, {self.goal_coor[1]})")
+        self.get_logger().info(f"initial position: ({curr_coor[0]:.2f}, {curr_coor[1]:.2f})")
+        self.get_logger().info(f"goal position: ({self.goal_coor[0]:.2f}, {self.goal_coor[1]:.2f})")
 
     def run_trial(self):
         self.get_logger().info(f"Trial running...")
@@ -68,17 +68,14 @@ class BARNRunner(Node):
         pos = self.gazebo_sim_ctrl.get_model_state().position
         curr_coor = (pos.x, pos.y)
 
-
-        # self.get_logger().info(f"Checking if robot moved...")
         # check whether the robot started to move
         while compute_distance(self.init_coor, curr_coor) < 0.1:
             # self.get_logger().info(f"x: {curr_coor[0]:.2f} (m), y: {curr_coor[1]:.2f} (m)")
             curr_time = self.get_clock().now()
             pos = self.gazebo_sim_ctrl.get_model_state().position
             curr_coor = (pos.x, pos.y)
-            rclpy.spin_once(self.gazebo_sim_ctrl, timeout_sec=0.01) # spin gazebo_sim node instead of self so gazebo_sim gets updated. or TODO use executor to spin both.
+            rclpy.spin_once(self.gazebo_sim_ctrl, timeout_sec=0.01) # spin gazebo_sim_ctrl node instead of self so gazebo_sim_ctrl gets updated. or TODO use executor to spin both.
             time.sleep(0.01) # so CPU is not overloaded
-        # self.get_logger().info(f"Robot moved!")
 
         # start navigation, check position, time and collision
         start_time = curr_time
@@ -149,7 +146,7 @@ class BARNRunner(Node):
         with self.file_lock:
             with open(out_path, "a") as f:
                 f.write(
-                    f"{world_idx} {self.trial_success} {collided} {timeout} {self.trial_elapsed_time:.4f} {nav_metric:.4f}\n"
+                    f"{world_idx} {int(self.trial_success)} {int(collided)} {int(timeout)} {self.trial_elapsed_time:.4f} {nav_metric:.4f}\n"
                 )
         
         # shutdown GazeboSimController node
@@ -175,8 +172,8 @@ class BARNRunner(Node):
         self.init_coor = (INIT_POSITION[0], INIT_POSITION[1])
         self.goal_coor = (INIT_POSITION[0] + GOAL_POSITION[0], INIT_POSITION[1] + GOAL_POSITION[1])
       
-    # hack to get ws/src/jackal_helper
     def _get_pkg_src_path(self):
+        # hack to get ws/src/jackal_helper
         workspace_path = dirname(dirname(dirname(dirname(get_package_share_directory("jackal_helper")))))
         jackal_helper_src_path = os.path.join(workspace_path, "src", "jackal_helper")
         return jackal_helper_src_path
