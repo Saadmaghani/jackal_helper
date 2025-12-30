@@ -10,10 +10,9 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
 from launch_ros.actions import Node, SetRemap
 
-"""Launch gz server, ros-gz-bridge, collision publisher, jackal, and gz gui optionally."""
+"""Launch gz simulation, ros-gz-bridge, jackal, BARN simulation runner, and (rviz2/gz gui) optionally."""
 
 # TODO: use_sim_time?
-# TODO: gz_sim.launch.py not safely exiting 
 
 ARGUMENTS = [
     DeclareLaunchArgument('rviz', default_value='false',
@@ -164,6 +163,6 @@ def generate_launch_description():
     ld.add_action(OpaqueFunction(function=launch_ros_gazebo))
     ld.add_action(OpaqueFunction(function=spawn_jackal))
     ld.add_action(BARN_runner_node)
-    ld.add_action(OpaqueFunction(function=launch_navigation_stack))
+    # ld.add_action(OpaqueFunction(function=launch_navigation_stack))
     return ld
 

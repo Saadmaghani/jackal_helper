@@ -37,6 +37,9 @@
   <!-- Gazebo Sim bridge interfaces -->
   <depend>ros_gz_interfaces</depend>
 
+  <!-- Navigation -->
+  <depend>nav2_bringup</depend>
+
   <!-- Makes the launch files available to ros2 launch command.  -->
   <exec_depend>ros2launch</exec_depend>
 

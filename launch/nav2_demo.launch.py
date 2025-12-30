@@ -27,6 +27,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 # Taken from https://github.com/clearpathrobotics/clearpath_nav2_demos/blob/jazzy/launch/nav2.launch.py
+# Adapted by removing namespace code, added runtime nav2_config file
 
 import os
 
@@ -40,7 +41,8 @@ from launch.actions import (
     DeclareLaunchArgument,
     GroupAction,
     IncludeLaunchDescription,
-    OpaqueFunction
+    OpaqueFunction,
+    LogInfo
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 
@@ -55,7 +57,7 @@ from nav2_common.launch import RewrittenYaml
 
 
 ARGUMENTS = [
-    DeclareLaunchArgument('use_sim_time', default_value='false',
+    DeclareLaunchArgument('use_sim_time', default_value='true',
                           choices=['true', 'false'],
                           description='Use sim time'),
     DeclareLaunchArgument('setup_path',
@@ -63,13 +65,16 @@ ARGUMENTS = [
                           description='Clearpath setup path'),
     DeclareLaunchArgument('scan_topic',
                           default_value='',
-                          description='Override the default 2D laserscan topic')
+                          description='Override the default 2D laserscan topic'),
+    DeclareLaunchArgument('nav2_config_file',
+                          default_value='nav2.yaml',
+                          description='The nav2.yaml config file.')
 ]
 
 
 def launch_setup(context, *args, **kwargs):
     # Packages
-    pkg_nav2_bringup = get_package_share_directory('nav2_bringup')
+    pkg_jackal_helper = get_package_share_directory('jackal_helper')
 
     # Launch Configurations
     use_sim_time = LaunchConfiguration('use_sim_time')
@@ -87,9 +92,9 @@ def launch_setup(context, *args, **kwargs):
     # see if we've overridden the scan_topic
     eval_scan_topic = scan_topic.perform(context)
     if len(eval_scan_topic) == 0:
-        eval_scan_topic = f'/{namespace}/sensors/lidar2d_0/scan'
+        eval_scan_topic = '/front/scan'
 
-    file_parameters = PathJoinSubstitution([setup_path, 'nav2.yaml'])
+    file_parameters = PathJoinSubstitution([setup_path, LaunchConfiguration('nav2_config_file')])
 
     rewritten_parameters = RewrittenYaml(
         source_file=file_parameters,
@@ -102,20 +107,16 @@ def launch_setup(context, *args, **kwargs):
     )
 
     launch_nav2 = PathJoinSubstitution(
-      [pkg_nav2_bringup, 'launch', 'navigation_launch.py'])
+      [pkg_jackal_helper, 'launch', 'nav2_bringup.launch.py'])
 
     nav2 = GroupAction([
-        PushRosNamespace(namespace),
-        SetRemap('/' + namespace + '/odom',
-                 '/' + namespace + '/platform/odom'),
-
+        SetRemap('/odom', '/platform/odom'),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(launch_nav2),
             launch_arguments=[
                 ('use_sim_time', use_sim_time),
                 ('params_file', rewritten_parameters),
                 ('use_composition', 'False'),
-                ('namespace', namespace)
               ]
         ),
     ])

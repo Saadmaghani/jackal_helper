@@ -13,11 +13,11 @@ from tf2_msgs.msg import TFMessage
 import numpy as np
 import time
 
-# comes from robot.yaml file. JACKAL_ENTITY_NAME = "robot" if namespace == "" or "/" else "<namespace>/robot"
+# comes from robot.yaml file. JACKAL_ENTITY_NAME = "robot" if namespace == "" or "/"
+# if namespace is something else, many things will need to change as code is hardcoded to fit namespace = ""
 JACKAL_ENTITY_NAME = "robot"
 DEBUG = False
 
-# TODO: figure out laser scan topic
 
 def create_model_state(x:float, y:float, z:float, angle:float) -> [Entity, Pose]:
     # create Entity & Pose objects
