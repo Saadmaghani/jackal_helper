@@ -16,6 +16,8 @@ from gazebo_simulation import GazeboSimulationController
 
 # this file will be used to run the experiments and control the simulation via gazebo_simulation
 
+# TODO: \r print statements not being shown 
+
 def compute_distance(p1, p2):
     return ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5
 
@@ -63,7 +65,7 @@ class BARNRunner(Node):
         self.get_logger().info(f"goal position: ({self.goal_coor[0]:.2f}, {self.goal_coor[1]:.2f})")
 
     def run_trial(self):
-        self.get_logger().info(f"Trial running...")
+        self.get_logger().info(f"Waiting for robot to start moving...")
         curr_time = self.get_clock().now()
         pos = self.gazebo_sim_ctrl.get_model_state().position
         curr_coor = (pos.x, pos.y)
@@ -77,6 +79,7 @@ class BARNRunner(Node):
             rclpy.spin_once(self.gazebo_sim_ctrl, timeout_sec=0.01) # spin gazebo_sim_ctrl node instead of self so gazebo_sim_ctrl gets updated. or TODO use executor to spin both.
             time.sleep(0.01) # so CPU is not overloaded
 
+        self.get_logger().info(f"Trial running...")
         # start navigation, check position, time and collision
         start_time = curr_time
         start_time_cpu = time.time()

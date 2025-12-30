@@ -59,12 +59,14 @@ What I've done:
 ## DEC 29
 
 *TODO:*
-1. Integrate navigation stack
-2. Integrate publishing goal
+1. Integrate navigation stack (done)
+2. Integrate publishing goal (done)
     `ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose "{pose: {header: {frame_id: 'odom'}, pose: {position: {x: 10.0, y: 0.0, z: 0.0}, orientation: {w: 1.0}}}}"`
-3. simplify navigation launch files
-4. make navigation faster
+3. simplify navigation launch files (done)
+    1. simplify logging to terminal (tried my best)
+4. make navigation faster (similar to ROS1) (done)
 5. run benchmark on baseline 
 6. write documentation
 7. publish as "The BARN Challenge"
 8. meet with professor
+9. DYNA-BARN
