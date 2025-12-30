@@ -54,3 +54,17 @@ What I've done:
 *TODO:*
 1. write gazebo_simulation.py to help the main run.py file 
 2. write the run.py as a node which runs the experiment and outputs the results too.
+
+
+## DEC 29
+
+*TODO:*
+1. Integrate navigation stack
+2. Integrate publishing goal
+    `ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose "{pose: {header: {frame_id: 'odom'}, pose: {position: {x: 10.0, y: 0.0, z: 0.0}, orientation: {w: 1.0}}}}"`
+3. simplify navigation launch files
+4. make navigation faster
+5. run benchmark on baseline 
+6. write documentation
+7. publish as "The BARN Challenge"
+8. meet with professor
